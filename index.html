@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="fr"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="DJ Stock">
+<meta name="theme-color" content="#14161c"><title>DJ Stock</title>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#f3f3f6;--sf:#fff;--ln:#d9dbe3;--tx:#1a1c24;--mu:#666b7a;--ac:#e0287a;--range:#16917f;--presta:#3f6fe0;--nettoyer:#b87f0a;--reparer:#d03c3c}
+@media(prefers-color-scheme:dark){:root{--bg:#14161c;--sf:#1d2029;--ln:#2c3140;--tx:#eceef3;--mu:#9aa0b0;--ac:#ff5aa5;--range:#3fb8a5;--presta:#6c97ff;--nettoyer:#f0b43c;--reparer:#ef6a6a}}
+*{box-sizing:border-box}html,body{margin:0}
+body{background:var(--bg);color:var(--tx);font:17px/1.4 'Barlow Semi Condensed',system-ui,sans-serif;padding:env(safe-area-inset-top) 0 calc(76px + env(safe-area-inset-bottom))}
+main{max-width:640px;margin:0 auto;padding:14px}
+h1{font-size:26px;margin:6px 0 12px}h2{font-size:19px;margin:20px 0 8px}
+.card{background:var(--sf);border:1px solid var(--ln);border-radius:10px;padding:12px;margin:0 0 10px;display:block;color:inherit;text-decoration:none}
+.row{display:flex;gap:8px;align-items:center;justify-content:space-between}
+.mu{color:var(--mu);font-size:15px}
+input,select,textarea,button{font:inherit;color:inherit;background:var(--bg);border:1px solid var(--ln);border-radius:8px;padding:10px;width:100%;margin:0 0 8px}
+label{font-size:14px;color:var(--mu);display:block;margin-bottom:2px}
+button{width:auto;background:var(--ac);color:#fff;border:0;font-weight:700;cursor:pointer;padding:10px 16px}
+button.alt{background:var(--bg);color:var(--tx);border:1px solid var(--ln)}
+.st{display:inline-block;border-radius:99px;padding:2px 10px;font-size:14px;font-weight:600;border:1.5px solid currentColor}
+.range{color:var(--range)}.presta{color:var(--presta)}.nettoyer{color:var(--nettoyer)}.reparer{color:var(--reparer)}
+.chips{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px}
+.chips button{background:var(--sf);border:2px solid currentColor;width:100%}.chips button.on{background:currentColor}.chips button.on span{color:#fff}
+nav{position:fixed;bottom:0;left:0;right:0;display:flex;background:var(--sf);border-top:1px solid var(--ln);padding-bottom:env(safe-area-inset-bottom)}
+nav a{flex:1;text-align:center;padding:14px 4px;color:var(--mu);text-decoration:none;font-weight:600}nav a.on{color:var(--ac);box-shadow:inset 0 3px var(--ac)}
+.err{color:var(--reparer)}:focus-visible{outline:2px solid var(--ac)}
+</style></head><body><main id="app"></main><nav id="nav"></nav>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script>
+// ⚙️ À REMPLIR (Supabase > Project Settings > API). Seule la clé "anon" ici, jamais service_role.
+const SUPABASE_URL='https://VOTRE-PROJET.supabase.co', SUPABASE_ANON_KEY='VOTRE_CLE_ANON';
+const sb=supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
+const ST={range:'Rangé',presta:'Sorti en presta',nettoyer:'À nettoyer',reparer:'À réparer / HS'};
+const $=s=>document.querySelector(s), app=$('#app');
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const badge=s=>`<span class="st ${s}">${ST[s]}</span>`;
+const f=(id,l,v='',t='text')=>`<label for="${id}">${l}</label><input id="${id}" type="${t}" value="${esc(v)}">`;
+const val=id=>$('#'+id).value.trim()||null;
+const go=h=>{location.hash=h};
+let filter={q:'',s:''};
+
+async function boot(){
+  const {data:{session}}=await sb.auth.getSession();
+  if(!session) return login();
+  const {data:m}=await sb.from('members').select('org_id').maybeSingle();
+  if(!m) return setup();
+  addEventListener('hashchange',route);route();
+}
+function login(msg=''){
+  app.innerHTML=`<h1>DJ Stock</h1><div class="card">${f('em','Email','','email')}${f('pw','Mot de passe','','password')}
+  <p class="err">${msg}</p><button id="in">Se connecter</button> <button class="alt" id="up">Créer un compte</button></div>`;
+  const run=fn=>async()=>{const {error}=await sb.auth[fn]({email:val('em'),password:val('pw')});error?login(error.message):boot()};
+  $('#in').onclick=run('signInWithPassword');$('#up').onclick=run('signUp');
+}
+function setup(){
+  app.innerHTML=`<h1>Bienvenue</h1><div class="card"><p>Crée ton entreprise (premier compte = admin). Si ton équipe existe déjà, demande à l'admin de t'ajouter (voir README).</p>
+  ${f('on','Nom de l\'entreprise')}<button id="go">Créer</button></div>`;
+  $('#go').onclick=async()=>{const {error}=await sb.rpc('create_org',{n:val('on')});error?alert(error.message):boot()};
+}
+function nav(){
+  const h=location.hash;const L=[['#/','Stock'],['#/patch','Patch'],['#/maint','Maintenance'],['#/presta','Presta']];
+  $('#nav').innerHTML=L.map(([a,t])=>`<a href="${a}" class="${(a==='#/'?h===''||h==='#/':h.startsWith(a))?'on':''}">${t}</a>`).join('');
+}
+function route(){nav();const [,p,id]=location.hash.split('/');({p:product,u:unit,t:tag,patch,maint,presta}[p]||home)(id)}
+
+async function home(){
+  const {data:P,error}=await sb.from('products').select('*,units(*)').order('name');
+  if(error)return app.innerHTML=`<p class="err">${esc(error.message)}</p>`;
+  const draw=()=>{
+    const q=filter.q.toLowerCase();
+    const list=P.filter(p=>(p.name+(p.category||'')+(p.brand||'')).toLowerCase().includes(q)&&(!filter.s||p.units.some(u=>u.state===filter.s)));
+    $('#list').innerHTML=list.map(p=>{const r=p.units.filter(u=>u.state==='range').length;
+      const bad=p.units.filter(u=>u.state!=='range'&&u.state!=='presta').length;
+      return `<a class="card" href="#/p/${p.id}"><div class="row"><b>${esc(p.name)}</b><span>${r}/${p.units.length} rangés</span></div>
+      <div class="mu">${esc([p.category,p.brand,p.power].filter(Boolean).join(' · '))}</div>
+      ${p.units.filter(u=>u.state!=='range').map(u=>badge(u.state)).join(' ')}</a>`}).join('')||'<p class="mu">Rien ici. Va dans Patch pour ajouter ton matériel.</p>';};
+  app.innerHTML=`<h1>Stock</h1><input id="q" placeholder="Rechercher" value="${esc(filter.q)}">
+  <select id="fs"><option value="">Tous les états</option>${Object.entries(ST).map(([k,v])=>`<option value="${k}" ${filter.s===k?'selected':''}>${v}</option>`)}</select><div id="list"></div>`;
+  $('#q').oninput=e=>{filter.q=e.target.value;draw()};$('#fs').onchange=e=>{filter.s=e.target.value;draw()};draw();
+}
+
+async function product(id){
+  const {data:p}=await sb.from('products').select('*,units(*)').eq('id',id).single();
+  const us=p.units.sort((a,b)=>(a.label||'').localeCompare(b.label||'',undefined,{numeric:true}));
+  app.innerHTML=`<a href="#/">← Stock</a><h1>${esc(p.name)}</h1>
+  <div class="card">${f('n','Nom',p.name)}${f('c','Catégorie',p.category)}${f('b','Marque',p.brand)}${f('w','Puissance / specs',p.power)}${f('no','Notes',p.notes)}<button id="sv">Enregistrer</button></div>
+  <h2>Exemplaires (${us.length})</h2>${us.map(u=>`<a class="card" href="#/u/${u.id}"><div class="row"><b>${esc(u.label||'Sans nom')}</b>${badge(u.state)}</div>
+  <div class="mu">${u.dmx?'DMX '+esc(u.dmx)+' · ':''}${esc(u.role_note||'')} ${u.tag_code?'':'· ⚠ sans tag'}</div></a>`).join('')}
+  <button class="alt" id="add">+ Ajouter un exemplaire</button>`;
+  $('#sv').onclick=async()=>{await sb.from('products').update({name:val('n'),category:val('c'),brand:val('b'),power:val('w'),notes:val('no')}).eq('id',id);product(id)};
+  $('#add').onclick=async()=>{await sb.from('units').insert({product_id:id,label:'n°'+(us.length+1)});product(id)};
+}
+
+async function unit(id){
+  const {data:u}=await sb.from('units').select('*,products(name)').eq('id',id).single();
+  const {data:H}=await sb.from('history').select('*').eq('unit_id',id).order('at',{ascending:false}).limit(15);
+  app.innerHTML=`<a href="#/p/${u.product_id}">← ${esc(u.products.name)}</a><h1>${esc(u.products.name)} ${esc(u.label||'')}</h1>
+  <div class="chips">${Object.entries(ST).map(([k,v])=>`<button class="${k} ${u.state===k?'on':''}" data-s="${k}"><span>${v}</span></button>`).join('')}</div>
+  <div class="card">${f('l','Nom de l\'exemplaire',u.label)}${f('d','Adresse DMX',u.dmx)}${f('r','Rôle (ex. spot jardin gauche)',u.role_note)}
+  ${f('sn','N° de série',u.serial)}${f('lo','Emplacement',u.location)}<label for="nt">Note (panne, remarque)</label><textarea id="nt">${esc(u.note)}</textarea>
+  <p class="mu">Tag : ${esc(u.tag_code||'aucun')}</p><button id="sv">Enregistrer</button></div>
+  <h2>Historique</h2>${H.map(h=>`<div class="mu">${new Date(h.at).toLocaleString('fr-FR')} — ${esc(h.event)}</div>`).join('')}`;
+  document.querySelectorAll('[data-s]').forEach(b=>b.onclick=async()=>{await sb.from('units').update({state:b.dataset.s}).eq('id',id);unit(id)});
+  $('#sv').onclick=async()=>{await sb.from('units').update({label:val('l'),dmx:val('d'),role_note:val('r'),serial:val('sn'),location:val('lo'),note:val('nt')}).eq('id',id);unit(id)};
+}
+
+// URL du tag NFC : https://ton-site/#/t/CODE
+async function tag(code){
+  if(!/^\d{8}$/.test(code))return app.innerHTML=`<h1>Code invalide</h1><p>Un code de tag fait 8 chiffres.</p>`;
+  const {data:u}=await sb.from('units').select('id').eq('tag_code',code).maybeSingle();
+  if(u)return go('/u/'+u.id);
+  const {data:Q}=await sb.from('units').select('id,label,products(name)').is('tag_code',null).order('created_at',{foreignTable:'products'}).limit(30);
+  const target=sessionStorage.target&&Q.find(x=>x.id===sessionStorage.target)||Q[0];
+  app.innerHTML=`<h1>Tag inconnu</h1><p class="mu">Code ${esc(code)}</p>`+(target?
+  `<div class="card"><p>Associer à <b>${esc(target.products.name)} ${esc(target.label||'')}</b> ?</p><button id="ok">Oui, associer</button></div>
+  <h2>Ou choisir un autre</h2>${Q.map(x=>`<button class="alt" data-id="${x.id}">${esc(x.products.name)} ${esc(x.label||'')}</button>`).join(' ')}`:'<p>Aucun exemplaire sans tag. Crée d\'abord ton matériel dans Patch.</p>');
+  const bind=async i=>{const {error}=await sb.from('units').update({tag_code:code}).eq('id',i);if(error)return alert(error.message);
+    const nx=Q.find(x=>x.id!==i);sessionStorage.target=nx?nx.id:'';
+    app.innerHTML=`<h1>✔ Associé</h1>${nx?`<p>Suivant : <b>${esc(nx.products.name)} ${esc(nx.label||'')}</b>. Colle le tag et scanne-le.</p>`:'<p>Tous les exemplaires ont un tag.</p>'}<button id="nx">Mode patch</button>`;$('#nx').onclick=()=>go('/patch')};
+  if(target)$('#ok').onclick=()=>bind(target.id);
+  document.querySelectorAll('[data-id]').forEach(b=>b.onclick=()=>bind(b.dataset.id));
+}
+
+async function patch(){
+  const {data:Q}=await sb.from('units').select('id,label,products(name)').is('tag_code',null);
+  app.innerHTML=`<h1>Mode patch</h1><div class="card"><h2 style="margin-top:0">1. Créer en série</h2>${f('pn','Nom du produit')}${f('pc','Catégorie')}${f('pb','Marque')}${f('pw','Puissance / specs')}${f('pq','Quantité','1','number')}
+  <button id="mk">Créer</button></div>
+  <div class="card"><h2 style="margin-top:0">2. Étiqueter (${Q.length} sans tag)</h2><p class="mu">Choisis l'exemplaire, colle un tag neuf dessus puis approche l'iPhone : l'appli propose l'association. Elle enchaîne sur le suivant.</p>
+  ${Q.map(x=>`<button class="alt" data-id="${x.id}">${esc(x.products.name)} ${esc(x.label||'')}</button>`).join(' ')}</div>
+  <div class="card"><h2 style="margin-top:0">Générer des codes</h2>${f('gn','Nombre de codes','10','number')}<button id="gen">Générer</button>
+  <textarea id="gout" rows="5" readonly placeholder="Les URLs à encoder sur les tags apparaîtront ici" style="margin-top:8px"></textarea></div>
+  <div class="card">${f('man','Code du tag (8 chiffres)')}<button class="alt" id="mg">Ouvrir</button></div>`;
+  $('#mk').onclick=async()=>{const n=Math.max(1,+val('pq')||1);
+    const {data:p,error}=await sb.from('products').insert({name:val('pn'),category:val('pc'),brand:val('pb'),power:val('pw')}).select().single();
+    if(error)return alert(error.message);
+    await sb.from('units').insert(Array.from({length:n},(_,i)=>({product_id:p.id,label:n>1?'n°'+(i+1):null})));patch()};
+  document.querySelectorAll('[data-id]').forEach(b=>b.onclick=()=>{sessionStorage.target=b.dataset.id;b.textContent='✔ Cible : '+b.textContent});
+  $('#gen').onclick=async()=>{const n=Math.min(500,Math.max(1,+val('gn')||1));
+    const {data:T}=await sb.from('units').select('tag_code').not('tag_code','is',null);const used=new Set((T||[]).map(t=>t.tag_code)),out=new Set();
+    while(out.size<n){const c=String(Math.floor(Math.random()*1e8)).padStart(8,'0');if(!used.has(c))out.add(c)}
+    const base=location.origin+location.pathname+'#/t/';$('#gout').value=[...out].map(c=>base+c).join('\n');$('#gout').select()};
+  $('#mg').onclick=()=>val('man')&&go('/t/'+val('man'));
+}
+
+async function maint(){
+  const {data:U}=await sb.from('units').select('id,label,state,note,products(name)').in('state',['nettoyer','reparer']).order('state');
+  app.innerHTML=`<h1>Maintenance</h1>`+(U.map(u=>`<a class="card" href="#/u/${u.id}"><div class="row"><b>${esc(u.products.name)} ${esc(u.label||'')}</b>${badge(u.state)}</div><div class="mu">${esc(u.note||'')}</div></a>`).join('')||'<p class="mu">Rien à nettoyer ou réparer.</p>');
+}
+function presta(){app.innerHTML=`<h1>Prestations</h1><div class="card mu">Arrive en v2 : listes de matériel, check-out / check-in par scan, détection de conflits.</div>`}
+boot();
+</script></body></html>
