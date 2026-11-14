@@ -29,7 +29,7 @@ nav a{flex:1;text-align:center;padding:14px 4px;color:var(--mu);text-decoration:
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script>
 // ⚙️ À REMPLIR (Supabase > Project Settings > API). Seule la clé "anon" ici, jamais service_role.
-const SUPABASE_URL='https://vhjhumogspxuzrxwhphv.supabase.co', SUPABASE_ANON_KEY='sb_publishable_uxNk_hvzbeUYAHZCnHK8gg_SFOsNtAo';
+const SUPABASE_URL='https://VOTRE-PROJET.supabase.co', SUPABASE_ANON_KEY='VOTRE_CLE_ANON';
 const sb=supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 const ST={range:'Rangé',presta:'Sorti en presta',nettoyer:'À nettoyer',reparer:'À réparer / HS'};
 const $=s=>document.querySelector(s), app=$('#app');
@@ -135,7 +135,8 @@ async function patch(){
     const {data:p,error}=await sb.from('products').insert({name:val('pn'),category:val('pc'),brand:val('pb'),power:val('pw')}).select().single();
     if(error)return alert(error.message);
     await sb.from('units').insert(Array.from({length:n},(_,i)=>({product_id:p.id,label:n>1?'n°'+(i+1):null})));patch()};
-  document.querySelectorAll('[data-id]').forEach(b=>b.onclick=()=>{sessionStorage.target=b.dataset.id;b.textContent='✔ Cible : '+b.textContent});
+  const mark=()=>document.querySelectorAll('[data-id]').forEach(b=>{const on=b.dataset.id===sessionStorage.target;b.dataset.l=b.dataset.l||b.textContent;b.textContent=(on?'✔ Cible : ':'')+b.dataset.l;b.style.borderColor=on?'var(--ac)':''});
+  document.querySelectorAll('[data-id]').forEach(b=>b.onclick=()=>{sessionStorage.target=sessionStorage.target===b.dataset.id?'':b.dataset.id;mark()});mark();
   $('#gen').onclick=async()=>{const n=Math.min(500,Math.max(1,+val('gn')||1));
     const {data:T}=await sb.from('units').select('tag_code').not('tag_code','is',null);const used=new Set((T||[]).map(t=>t.tag_code)),out=new Set();
     while(out.size<n){const c=String(Math.floor(Math.random()*1e8)).padStart(8,'0');if(!used.has(c))out.add(c)}
